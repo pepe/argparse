@@ -35,7 +35,7 @@
   \t:short-circuit - Whether or not to stop parsing and fail if this option is hit.\n
   \t:action - A function that will be invoked when the option is parsed.\n\n
 
-  There is also a special option :default that will be invoked on arguments
+  There is also a special :action that will be invoked on arguments
   that do not start with a -- or -. Use this option to collect unnamed
   arguments to your script.\n\n
 
@@ -79,6 +79,7 @@
     (def flags @"")
     (def opdoc @"")
     (def reqdoc @"")
+    (def defdoc @"")
     (loop [[name handler] :in (sort (pairs options))]
       (def short (handler :short))
       (when short (buffer/push-string flags short))
@@ -100,10 +101,26 @@
             (if-let [h (handler :help)] h "")
             "\n"))
         (buffer/push-string (if (handler :required) reqdoc opdoc)
-                            usage-fragment)))
-    (print "usage: " (get args 0) " [option] ... ")
+                            usage-fragment))
+      (when (= :command name)
+        (def usage-fragment
+          (string
+            (if (handler :required) " Reguired " " Optional ") 
+            (if-let [h (handler :help)] h "command")
+            ":"))
+        (buffer/push-string defdoc usage-fragment)
+        (when-let [c (handler :choices)]
+          (buffer/push-string defdoc "\n")
+          (loop [[name help] :pairs c]
+            (buffer/push-string defdoc (string "  " name " - " help "\n"))))))
+    (def defarg 
+      (if (options :command) " [command]" ""))
+    (print "usage: " (get args 0) defarg " [option] ... ")
     (print)
     (print description)
+    (print)
+    (unless (empty? defdoc)
+      (print defdoc))
     (print)
     (unless (empty? reqdoc)
       (print " Required:")
@@ -146,8 +163,10 @@
   # into the run table.
   (while (and scanning (< i arglen))
     (def arg (get args i))
-    (cond
 
+    (print (and scanning (< i arglen)) " - " (< i arglen) " - " scanning " - " i " - " arglen)
+
+    (cond
       # long name (--name)
       (string/has-prefix? "--" arg)
       (let [name (string/slice arg 2)
@@ -167,16 +186,20 @@
               (handle-option name handler))
             (usage "unknown flag " arg))))
 
-      # default
-      (if-let [handler (options :default)]
-        (do (++ i) (handle-option :default handler))
+      # command
+      (if-let [handler (options :command)]
+        (if-let [c (keys (handler :choices))]
+          (if (some |(= $ arg) c)
+            (handle-option :command handler)
+            (usage "could not handle command " arg)))
         (usage "could not handle option " arg))))
 
   # Handle defaults, required options
   (loop [[name handler] :pairs options]
-    (when (nil? (res name))
-      (when (handler :required)
-        (usage "option " name " is required"))
-      (put res name (handler :default))))
+    (when (and (nil? (res name)) (handler :required))
+      (if-not (= name :command)
+        (usage "option " name " is required")
+        (usage (or (handler :help) "command") " is required"))
+      (put res name (handler :command))))
 
   (if-not bad res))

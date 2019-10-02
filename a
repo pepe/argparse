@@ -1,0 +1,20 @@
+#!/usr/bin/env janet
+(import argparse :prefix "")
+
+(def argparse-params
+  ["Chidi CLI. Used to run everything."
+   :command {:kind :option
+             :choices {"server" "Run chidi server"
+                       "setup" "Setup chidi database"}
+             :default "server"
+             :help "command to run"}
+   "db" {:kind :option 
+         :default "chidi.db"}
+   "port" {:kind :option 
+           :short "p"}])
+
+(let [res (argparse ;argparse-params)]
+  (unless res
+    (os/exit 1))
+  (pp res))
+
